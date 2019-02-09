@@ -1,136 +1,119 @@
-from __future__ import print_function
-
+import math
+import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.autograd import Variable
-import torchvision
-import torchvision.transforms
-
-from_numpy = torch.from_numpy
-
-batch_size = 64
-num_epochs = 10
-store_every = 1000
-lr0 = 0.02
-
-mnist_transforms = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
-mnist_train = torchvision.datasets.MNIST(
-    root="./data", train=True, transform=mnist_transforms, download=True
-)
-mnist_test = torchvision.datasets.MNIST(
-    root="./data", train=False, transform=mnist_transforms, download=True
-)
-
-train_loader = torch.utils.data.DataLoader(
-    mnist_train, batch_size=batch_size, shuffle=True, num_workers=2
-)
-test_loader = torch.utils.data.DataLoader(
-    mnist_test, batch_size=batch_size, shuffle=True, num_workers=2
-)
-
-
-class ResLinear(nn.Module):
-    def __init__(self, in_features, out_features, activation=nn.ReLU()):
-        super(ResLinear, self).__init__()
-
-        self.in_features = in_features
-        self.out_features = out_features
-        self.activation = activation
-
-        self.linear = nn.Linear(in_features, out_features)
-        if in_features != out_features:
-            self.project_linear = nn.Linear(in_features, out_features)
-
-    def forward(self, x):
-        inner = self.activation(self.linear(x))
-        if self.in_features != self.out_features:
-            skip = self.project_linear(x)
-        else:
-            skip = x
-        return inner + skip
+from torch import nn
+from torch import optim
+import torch.utils.data as utils
+from params import batch_size, store_every, n_epochs, DATA_PATH, learning_rate
+from sklearn.model_selection import train_test_split
 
 
 class Flatten(nn.Module):
-    def forward(self, x):
-        x = x.view(x.size(0), -1)
-        return x
+    def forward(self, X):
+        X = X.view(X.size(0), -1)
+        return X
+
+
+class Dropout(nn.Module):
+    def forward(self, X, p=0.2):
+        shape = X.shape
+        size = int(p * np.prod(shape))
+        drop_idx = np.random.choice(np.arange(X.size), replace=False, size=size)
+        X = X.flatten()
+        X[drop_idx] = 0
+        return X.reshape(shape)
+
+
+class NN(nn.Module):
+    def __init__(self, features):
+        super(NN, self).__init__()
+
+        self.features = features
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2.0 / n))
+                m.bias.data.zero_()
+
+    def forward(self, X):
+        X = self.features(X)
+        return X
 
 
 model = nn.Sequential(
-    nn.Conv2d(1, 16, 5),
-    nn.ReLU(),
-    nn.MaxPool2d(2),
-    nn.Conv2d(16, 16, 5),
-    nn.ReLU(),
-    nn.MaxPool2d(2),
+    nn.Conv2d(3, 64, 3, 1),
+    nn.ReLU(True),
+    nn.MaxPool2d(2, 2),
+    nn.Conv2d(64, 128, 3, 1),
+    nn.ReLU(True),
+    nn.MaxPool2d(2, 2),
+    nn.Conv2d(128, 256, 3, 1),
+    nn.MaxPool2d(2, 2),
+    nn.ReLU(True),
+    nn.Conv2d(256, 512, 3, 1),
+    nn.MaxPool2d(2, 2),
+    nn.ReLU(True),
     Flatten(),
-    ResLinear(256, 100),
-    nn.ReLU(),
-    ResLinear(100, 10),
+    nn.Linear(2048, 512),
+    nn.ReLU(True),
+    nn.Linear(512, 512),
+    nn.ReLU(True),
+    nn.Linear(512, 2),
 )
 
 model = model.cuda()
-
-
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=lr0)
+optimizer = optim.SGD(model.parameters(), lr=learning_rate)
 
 
-def adjust_lr(optimizer, epoch, total_epochs):
-    lr = lr0 * (0.1 ** (epoch / float(total_epochs)))
-    for param_group in optimizer.param_groups:
-        param_group["lr"] = lr
+def accuracy(y_pred, target):
+    correct = torch.eq(y_pred.max(1)[1], target).sum().type(torch.FloatTensor)
+    return correct / len(target)
 
 
-# `torch.optim.lr_scheduler` can be your good friend
-
-
-def accuracy(proba, y):
-    correct = torch.eq(proba.max(1)[1], y).sum().type(torch.FloatTensor)
-    return correct / y.size(0)
-
-
-def evaluate(dataset_loader, criterion):
+def evaluate(dataloader, batch_size=batch_size):
     LOSSES = 0
+    ACCURACY = 0
     COUNTER = 0
-    for batch in dataset_loader:
+    for batch in dataloader:
         optimizer.zero_grad()
-
-        x, y = batch
-        x = x.view(-1, 1, 28, 28)
+        X, y = batch
+        X = X.view(-1, 3, 64, 64)
         y = y.view(-1)
-        x = x.cuda()
+        X = X.cuda()
         y = y.cuda()
 
-        loss = criterion(model(x), y)
+        loss = criterion(model(X), y)
+        acc = accuracy(model(X), y)
         n = y.size(0)
         LOSSES += loss.sum().data.cpu().numpy() * n
+        ACCURACY += acc.sum().data.cpu().numpy() * n
         COUNTER += n
 
-    return LOSSES / float(COUNTER)
+    floss = LOSSES / float(COUNTER)
+    faccuracy = ACCURACY / float(COUNTER)
+    return floss, faccuracy
 
 
-def train_model():
-
+def train(dataloader, testloader):
     LOSSES = 0
     COUNTER = 0
     ITERATIONS = 0
-    learning_curve_nll_train = list()
-    learning_curve_nll_test = list()
-    learning_curve_acc_train = list()
-    learning_curve_acc_test = list()
-    for e in range(num_epochs):
-        for batch in train_loader:
+    avg_loss = float("inf")
+    train_accs = []
+    test_accs = []
+    train_losses = []
+    test_losses = []
+    for e in range(n_epochs):
+        for batch in dataloader:
             optimizer.zero_grad()
-
-            x, y = batch
-            x = x.view(-1, 1, 28, 28)
+            X, y = batch
+            X = X.view(-1, 3, 64, 64)
             y = y.view(-1)
-            x = x.cuda()
+            X = X.cuda()
             y = y.cuda()
 
-            loss = criterion(model(x), y)
+            loss = criterion(model(X), y)
             loss.backward()
             optimizer.step()
 
@@ -138,7 +121,7 @@ def train_model():
             LOSSES += loss.sum().data.cpu().numpy() * n
             COUNTER += n
             ITERATIONS += 1
-            if ITERATIONS % (store_every / 5) == 0:
+            if ITERATIONS % (store_every / 2) == 0:
                 avg_loss = LOSSES / float(COUNTER)
                 LOSSES = 0
                 COUNTER = 0
@@ -146,29 +129,41 @@ def train_model():
 
             if ITERATIONS % (store_every) == 0:
 
-                train_loss = evaluate(train_loader, criterion)
-                learning_curve_nll_train.append(train_loss)
-                test_loss = evaluate(test_loader, criterion)
-                learning_curve_nll_test.append(test_loss)
+                train_loss, train_acc = evaluate(dataloader)
+                train_accs.append(train_acc)
+                train_losses.append(train_loss)
+                test_loss, test_acc = evaluate(testloader)
+                test_accs.append(test_acc)
+                test_losses.append(test_loss)
 
-                train_acc = evaluate(train_loader, accuracy)
-                learning_curve_acc_train.append(train_acc)
-                test_acc = evaluate(test_loader, accuracy)
-                learning_curve_acc_test.append(test_acc)
-
+                print(" [EPOCH] {}".format(e + 1))
                 print(" [NLL] TRAIN {} / TEST {}".format(train_loss, test_loss))
                 print(" [ACC] TRAIN {} / TEST {}".format(train_acc, test_acc))
 
-        adjust_lr(optimizer, e + 1, num_epochs)
-
-    return (
-        learning_curve_nll_train,
-        learning_curve_nll_test,
-        learning_curve_acc_train,
-        learning_curve_acc_test,
-    )
-
 
 if __name__ == "__main__":
+    X = np.load(DATA_PATH + "train_data.npy")
+    X = X / np.max(X)
+    idx = np.random.permutation(len(X))
+    X = X[idx]
+    y = np.load(DATA_PATH + "train_target.npy")
+    y = y[idx]
+    # validation_set = np.load(DATA_PATH + "test_data.npy")
+    # validation = torch.Tensor(validation_set).float()
 
-    _ = train_model()
+    X = torch.Tensor(X).float()
+    y = torch.Tensor(y).long()
+    train_size = int(0.8 * len(X))
+    test_size = len(X) - train_size
+    train_index, test_index = torch.utils.data.random_split(
+        np.arange(len(X)), [train_size, test_size]
+    )
+    train_dataset = utils.TensorDataset(X[train_index], y[train_index])
+    dataloader = utils.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+    )
+    test_dataset = utils.TensorDataset(X[test_index], y[test_index])
+    testloader = utils.DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+    )
+    train(dataloader, testloader)
