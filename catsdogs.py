@@ -4,7 +4,6 @@ import torch
 from torch import nn
 from torch import optim
 import torch.utils.data as utils
-from torchvision import models
 from params import batch_size, store_every, n_epochs, DATA_PATH, learning_rate
 from sklearn.model_selection import train_test_split
 
@@ -42,47 +41,24 @@ class NN(nn.Module):
 
 
 model = nn.Sequential(
-    nn.Conv2d(3, 32, 3, 1),
-    nn.ReLU(True),
-    nn.Conv2d(32, 32, 3, 1),
-    nn.ReLU(True),
-    # nn.Conv2d(16, 16, 3, 1),
-    # nn.ReLU(True),
-    nn.MaxPool2d(2, 2),
-    # nn.Conv2d(16, 32, 3, 1),
-    # nn.ReLU(True),
-    # nn.Conv2d(32, 32, 3, 1),
-    # nn.ReLU(True),
-    nn.Conv2d(32, 64, 3, 1),
-    nn.ReLU(True),
-    nn.Conv2d(64, 64, 3, 1),
+    nn.Conv2d(3, 64, 3, 1),
     nn.ReLU(True),
     nn.MaxPool2d(2, 2),
     nn.Conv2d(64, 128, 3, 1),
     nn.ReLU(True),
     nn.MaxPool2d(2, 2),
     nn.Conv2d(128, 256, 3, 1),
-    nn.ReLU(True),
-    # nn.Conv2d(32, 64, 3, 1),
-    # nn.ReLU(True),
-    # nn.Conv2d(64, 64, 3, 1),
-    # nn.ReLU(True),
-    # nn.Conv2d(64, 64, 3, 1),
-    # nn.ReLU(True),
-    # nn.MaxPool2d(2, 2),
-    # nn.Conv2d(64, 128, 3, 1),
-    # nn.ReLU(True),
-    # nn.Conv2d(128, 128, 3, 1),
-    # nn.ReLU(True),
-    # nn.Conv2d(128, 128, 3, 1),
-    # nn.ReLU(True),
     nn.MaxPool2d(2, 2),
+    nn.ReLU(True),
+    nn.Conv2d(256, 512, 3, 1),
+    nn.MaxPool2d(2, 2),
+    nn.ReLU(True),
     Flatten(),
-    nn.Linear(256, 256),
+    nn.Linear(2048, 512),
     nn.ReLU(True),
-    nn.Linear(256, 256),
+    nn.Linear(512, 512),
     nn.ReLU(True),
-    nn.Linear(256, 2),
+    nn.Linear(512, 2),
 )
 
 model = model.cuda()
@@ -107,9 +83,8 @@ def evaluate(dataloader, batch_size=batch_size):
         X = X.cuda()
         y = y.cuda()
 
-        y_hat = model(X)
-        loss = criterion(y_hat, y)
-        acc = accuracy(y_hat, y)
+        loss = criterion(model(X), y)
+        acc = accuracy(model(X), y)
         n = y.size(0)
         LOSSES += loss.sum().data.cpu().numpy() * n
         ACCURACY += acc.sum().data.cpu().numpy() * n
@@ -138,8 +113,7 @@ def train(dataloader, testloader):
             X = X.cuda()
             y = y.cuda()
 
-            y_hat = model(X)
-            loss = criterion(y_hat, y)
+            loss = criterion(model(X), y)
             loss.backward()
             optimizer.step()
 
