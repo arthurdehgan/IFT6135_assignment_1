@@ -1,3 +1,4 @@
+from itertools import product
 import numpy as np
 import torch
 from torch import nn
@@ -97,10 +98,8 @@ def train(dataloader, testloader, lr):
         print("EPOCH: {}".format(EPOCH))
         print(" [NLL] TRAIN {} / TEST {}".format(train_loss, valid_loss))
         print(" [ACC] TRAIN {} / TEST {}".format(train_acc, valid_acc))
-    np.save(
-        "best_model_{}_{}_{:.2f}".format(batch_size, lr, best_model["vacc"]), best_model
-    )
     print("stopping, best valid acc is:", best_model["vacc"])
+    return best_model
 
 
 if __name__ == "__main__":
@@ -121,42 +120,43 @@ if __name__ == "__main__":
         np.arange(len(X)), [train_size, valid_size]
     )
     train_dataset = utils.TensorDataset(X[train_index], y[train_index])
-    dataloader = utils.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
-    )
     valid_dataset = utils.TensorDataset(X[valid_index], y[valid_index])
-    validloader = utils.DataLoader(
-        valid_dataset, batch_size=batch_size, shuffle=True, num_workers=2
-    )
+    best_vacc = 0
     lrs = [0.05, 0.01, 0.005]
-    for lr in lrs:
+    batch_sizes = [64, 128]
+    layers = [32, 16, 8]
+    linears = [128, 256, 512]
+    for lin, lr, lay, bs in product(linears, lrs, batch_sizes, layers):
+        dataloader = utils.DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        )
+        validloader = utils.DataLoader(
+            valid_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        )
         model = nn.Sequential(
-            nn.Conv2d(3, 64, 3, 1),
-            nn.ReLU(True),
-            nn.Conv2d(64, 128, 3, 1),
-            nn.ReLU(True),
-            nn.Conv2d(128, 128, 3, 1),
-            nn.ReLU(True),
+            nn.Conv2d(3, lay, 3, 1),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(128, 256, 3, 1),
             nn.ReLU(True),
-            nn.Conv2d(256, 256, 3, 1),
-            nn.ReLU(True),
+            nn.Conv2d(lay, lay * 2, 3, 1),
             nn.MaxPool2d(2, 2),
-            nn.Conv2d(256, 512, 3, 1),
             nn.ReLU(True),
-            nn.Conv2d(512, 512, 3, 1),
+            nn.Conv2d(lay * 2, lay * 4, 3, 1),
             nn.ReLU(True),
-            nn.MaxPool2d(2, 2),
+            nn.Conv2d(lay * 4, lay * 4, 3, 1),
+            nn.MaxPool2d(3, 3),
+            nn.ReLU(True),
             Flatten(),
-            nn.Linear(8192, 512),
+            nn.Linear(lay * 3 * 3 * 4, lin),
             nn.ReLU(True),
-            nn.Linear(512, 512),
-            nn.ReLU(True),
-            nn.Linear(512, 2),
+            nn.Linear(lin, 2),
         )
 
         model = model.cuda()
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.SGD(model.parameters(), lr=lr)
-        train(dataloader, validloader, lr)
+        print(model, lr, bs)
+        result = train(dataloader, validloader, lr)
+        if result["vacc"] > best_vacc:
+            best_model = result
+            best_vacc = best_model["vacc"]
+    np.save("best_model", best_model)
