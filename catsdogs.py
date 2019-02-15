@@ -4,12 +4,29 @@ import torch
 from torch import nn
 from torch import optim
 import torch.utils.data as utils
-from matplotlib import image as img
 
 
 class Flatten(nn.Module):
     def forward(self, X):
         X = X.view(X.size(0), -1)
+        return X
+
+
+class Dropout(nn.Module):
+    def __init__(self, p=0.3):
+        super(Dropout, self).__init__()
+        self.p = p
+
+    def forward(self, X):
+        data = X.data.cpu().numpy()
+        shape = data.shape
+        drop_idx = np.random.choice(
+            np.arange(data.size), replace=False, size=int(data.size * self.p)
+        )
+        data = data.flatten()
+        data[drop_idx] = 0
+        data = data.reshape(shape)
+        X.data = torch.from_numpy(data).cuda()
         return X
 
 
@@ -26,7 +43,7 @@ def train(net, dataloader, validloader, lr):
     valid_accs = []
     train_losses = []
     valid_losses = []
-    train_loss = float("inf")
+    old_train_loss = float("inf")
     vacc = 0
     while GO:
         EPOCH += 1
@@ -42,7 +59,6 @@ def train(net, dataloader, validloader, lr):
             loss.backward()
             optimizer.step()
 
-        old_train_loss = train_loss
         train_loss, train_acc = net.evaluate(dataloader)
         valid_loss, valid_acc = net.evaluate(validloader)
 
@@ -65,13 +81,14 @@ def train(net, dataloader, validloader, lr):
                 "lins": net.lin_size,
             }
             vacc = valid_acc
-        # We early stop when the validation loss inreases 3 times in a row
+        # We early stop when the training loss stays the same 3 timws in a row
         if abs(train_loss - old_train_loss) < 0.001:
             STOP += 1
             if STOP > 3:
                 GO = False
         else:
             STOP = 0
+        old_train_loss = train_loss
 
         print("EPOCH: {}".format(EPOCH))
         print(" [LOSS] TRAIN {} / TEST {}".format(train_loss, valid_loss))
@@ -99,6 +116,7 @@ class Net(nn.Module):
             nn.ReLU(True),
             Flatten(),
             nn.Linear(conv_size * 3 * 3 * 4, lin_size),
+            Dropout(),
             nn.ReLU(True),
             nn.Linear(lin_size, 2),
         ).cuda()
@@ -158,11 +176,11 @@ if __name__ == "__main__":
     batch_size = 64
 
     best_vacc = 0
-    lrs = [0.05, 0.01]
+    lrs = [0.01]
     batch_sizes = [64, 128]
-    layers = [64, 32, 16, 8]
+    layers = [128, 64, 32, 16]
     linears = [128, 256]
-    for lin, lr, lay, bs in product(linears, lrs, batch_sizes, layers):
+    for lin, lr, lay, bs in product(linears, lrs, layers, batch_sizes):
         dataloader = utils.DataLoader(
             train_dataset, batch_size=bs, shuffle=True, num_workers=2
         )
