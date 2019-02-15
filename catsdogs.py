@@ -7,9 +7,9 @@ import torch.utils.data as utils
 
 
 class Flatten(nn.Module):
-    def forward(self, X):
-        X = X.view(X.size(0), -1)
-        return X
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        return x
 
 
 class Dropout(nn.Module):
@@ -17,8 +17,8 @@ class Dropout(nn.Module):
         super(Dropout, self).__init__()
         self.p = p
 
-    def forward(self, X):
-        data = X.data.cpu().numpy()
+    def forward(self, x):
+        data = x.data.cpu().numpy()
         shape = data.shape
         drop_idx = np.random.choice(
             np.arange(data.size), replace=False, size=int(data.size * self.p)
@@ -26,8 +26,8 @@ class Dropout(nn.Module):
         data = data.flatten()
         data[drop_idx] = 0
         data = data.reshape(shape)
-        X.data = torch.from_numpy(data).cuda()
-        return X
+        x.data = torch.from_numpy(data).cuda()
+        return x
 
 
 def accuracy(y_pred, target):
@@ -35,17 +35,15 @@ def accuracy(y_pred, target):
     return correct / len(target)
 
 
-def train(net, dataloader, validloader, lr):
-    GO = True
-    STOP = 0
+def train(net, dataloader, validloader, lr, p=50):
     EPOCH = 0
+    j = 0
     train_accs = []
     valid_accs = []
     train_losses = []
     valid_losses = []
-    old_train_loss = float("inf")
-    vacc = 0
-    while GO:
+    best_vloss = float("inf")
+    while j < p:
         EPOCH += 1
         net.train()
         for batch in dataloader:
@@ -68,7 +66,7 @@ def train(net, dataloader, validloader, lr):
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
         valid_accs.append(valid_acc)
-        if valid_acc > vacc:
+        if valid_loss < best_vloss:
             best_model = {
                 "net": net.state_dict(),
                 "epoch": EPOCH,
@@ -82,18 +80,9 @@ def train(net, dataloader, validloader, lr):
                 "convs": net.conv_size,
                 "lins": net.lin_size,
             }
-            vacc = valid_acc
-        # We early stop when the training loss stays the same 3 timws in a row
-        if EPOCH > 250:
-            GO = False
-            print("TOO MANY EPOCHS")
-        if abs(train_loss - old_train_loss) < 0.001 and EPOCH <= 50:
-            STOP += 1
-            if STOP > 3:
-                GO = False
+            best_vloss = valid_loss
         else:
-            STOP = 0
-        old_train_loss = train_loss
+            j += 1
 
         print("EPOCH: {}".format(EPOCH))
         print(" [LOSS] TRAIN {} / TEST {}".format(train_loss, valid_loss))
@@ -132,8 +121,8 @@ class Net(nn.Module):
     def train(self):
         self.drop = True
 
-    def forward(self, X):
-        dat = self.model(X)
+    def forward(self, x):
+        dat = self.model(x)
         if self.drop:
             dat = self.dropout(dat)
         return self.lin(dat)
@@ -190,7 +179,7 @@ if __name__ == "__main__":
     batch_size = 64
 
     best_vacc = 0
-    lrs = [0.01]
+    lrs = [0.05]
     batch_sizes = [64, 128]
     layers = [128, 64, 32, 16]
     linears = [128, 256]
@@ -215,7 +204,7 @@ if __name__ == "__main__":
         print("Test accuracy is", model.evaluate(testloader))
 
         if result["vacc"] > best_vacc:
-            best_model = result
-            best_vacc = best_model["vacc"]
-    torch.save(best_model["net"], "best_model_net")
-    np.save("best_model_info", best_model)
+            best_overall_model = result
+            best_vacc = best_overall_model["vacc"]
+    torch.save(best_overall_model["net"], "best_model_net")
+    np.save("best_model_info", best_overall_model)
