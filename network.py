@@ -52,8 +52,8 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=50):
             optimizer.step()
 
         net.eval()
-        train_loss, train_acc = net.evaluate(dataloader)
-        valid_loss, valid_acc = net.evaluate(validloader)
+        train_loss, train_acc = net.evaluate(dataloader, criterion)
+        valid_loss, valid_acc = net.evaluate(validloader, criterion)
 
         train_accs.append(train_acc)
         train_losses.append(train_loss)
@@ -151,12 +151,11 @@ class Net(nn.Module):
             dat = self.dropout(dat)
         return self.lin(dat)
 
-    def evaluate(self, dataloader):
+    def evaluate(self, dataloader, criterion):
         LOSSES = 0
         ACCURACY = 0
         COUNTER = 0
         for batch in dataloader:
-            optimizer.zero_grad()
             X, y = batch
             X = X.view(-1, 3, 64, 64)
             y = y.view(-1)
