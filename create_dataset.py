@@ -1,26 +1,27 @@
 import numpy as np
 from matplotlib import image as img
-from path import Path as path
+import os
 
-Cats = path("trainset/Cat")
-Dogs = path("trainset/Dog")
-TEST_SET = path("testset/test")
+cats = "trainset/Cat/"
+dogs = "trainset/Dog/"
 
 train_set = []
 target = []
-for f in Cats.listdir():
+for f in os.listdir(cats):
     if f.endswith("jpg"):
-        mat = img.imread(f)
-        if not np.isnan(mat).any() and len(mat.shape) == 3:
-            train_set.append(mat)
-            target.append(0)
+        mat = img.imread(cats + f)
+        if not len(mat.shape) == 3:
+            mat = np.array((mat, mat, mat)).T
+        train_set.append(mat)
+        target.append(0)
 
-for f in Dogs.listdir():
+for f in os.listdir(dogs):
     if f.endswith("jpg"):
-        mat = img.imread(f)
-        if not np.isnan(mat).any() and len(mat.shape) == 3:
-            train_set.append(mat)
-            target.append(1)
+        mat = img.imread(dogs + f)
+        if not len(mat.shape) == 3:
+            mat = np.array((mat, mat, mat)).T
+        train_set.append(mat)
+        target.append(1)
 
 train_set = np.asarray(train_set)
 target = np.asarray(target)
@@ -30,10 +31,12 @@ np.save("train_target", target)
 del train_set
 
 test_set = []
-for f in (TEST_SET).listdir():
-    if f.endswith("jpg"):
-        mat = img.imread(f)
-        if not np.isnan(mat).any() and len(mat.shape) == 3:
-            test_set.append(mat)
+for i in range(1, 5000):
+    f = "testset/test/{}.jpg".format(i)
+    mat = img.imread(f)
+    if not len(mat.shape) == 3:
+        mat = np.array((mat, mat, mat)).T
+    test_set.append(mat)
 
-np.save(TEST_SET.parent / "test_data", np.array(test_set))
+print(len(test_set))
+np.save("test_data", np.array(test_set))
