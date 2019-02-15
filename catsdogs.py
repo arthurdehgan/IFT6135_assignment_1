@@ -47,6 +47,7 @@ def train(net, dataloader, validloader, lr):
     vacc = 0
     while GO:
         EPOCH += 1
+        net.train()
         for batch in dataloader:
             optimizer.zero_grad()
             X, y = batch
@@ -59,6 +60,7 @@ def train(net, dataloader, validloader, lr):
             loss.backward()
             optimizer.step()
 
+        net.eval()
         train_loss, train_acc = net.evaluate(dataloader)
         valid_loss, valid_acc = net.evaluate(validloader)
 
@@ -82,7 +84,10 @@ def train(net, dataloader, validloader, lr):
             }
             vacc = valid_acc
         # We early stop when the training loss stays the same 3 timws in a row
-        if abs(train_loss - old_train_loss) < 0.001:
+        if EPOCH > 250:
+            GO = False
+            print("TOO MANY EPOCHS")
+        if abs(train_loss - old_train_loss) < 0.001 and EPOCH <= 50:
             STOP += 1
             if STOP > 3:
                 GO = False
@@ -100,6 +105,7 @@ class Net(nn.Module):
     def __init__(self, input_size, conv_size, lin_size):
         super(Net, self).__init__()
 
+        self.drop = True
         self.lin_size = lin_size
         self.conv_size = conv_size
         self.model = nn.Sequential(
@@ -116,13 +122,21 @@ class Net(nn.Module):
             nn.ReLU(True),
             Flatten(),
             nn.Linear(conv_size * 3 * 3 * 4, lin_size),
-            Dropout(),
-            nn.ReLU(True),
-            nn.Linear(lin_size, 2),
         ).cuda()
+        self.lin = nn.Sequential(nn.ReLU(True), nn.Linear(lin_size, 2)).cuda()
+        self.dropout = nn.Sequential(Dropout()).cuda()
+
+    def eval(self):
+        self.drop = False
+
+    def train(self):
+        self.drop = True
 
     def forward(self, X):
-        return self.model(X)
+        dat = self.model(X)
+        if self.drop:
+            dat = self.dropout(dat)
+        return self.lin(dat)
 
     def evaluate(self, dataloader):
         LOSSES = 0
