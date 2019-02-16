@@ -16,10 +16,10 @@ if __name__ == "__main__":
     y = y[idx]
 
     best_vacc = 0
-    LRS = [0.05]
-    BATCH_SIZES = [64, 128]
-    LAYERS = [128, 64, 32, 16]
-    LINEARS = [128, 256]
+    LRS = [0.005, 0.001, 0.0005]
+    BATCH_SIZES = [128, 256]
+    LAYERS = [64, 32]
+    LINEARS = [256, 512]
     for lin, lr, lay, bs in product(LINEARS, LRS, LAYERS, BATCH_SIZES):
         net = Net(3, lay, lin)
         print(net, lr, bs)

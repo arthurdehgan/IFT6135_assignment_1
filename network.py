@@ -4,7 +4,7 @@ from torch import nn
 import torch.utils.data as utils
 
 
-def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
+def train(net, X, y, optimizer, criterion, batch_size, lr, p=15):
     X = torch.Tensor(X).float()
     N = len(X)
     y = torch.Tensor(y).long()
@@ -169,7 +169,7 @@ class Net(nn.Module):
         floss = LOSSES / float(COUNTER)
         faccuracy = ACCURACY / float(COUNTER)
         return floss, faccuracy
-    
+
     def train(self, X, y, epochs, optimizer, criterion, batch_size, lr):
         train_dataset = utils.TensorDataset(X, y)
         dataloader = utils.DataLoader(
@@ -199,5 +199,4 @@ class Net(nn.Module):
 
             print("epoch: {}".format(epoch))
             print("TRAIN : [LOSS] {} / [ACC] {}".format(train_loss, train_acc))
-        print('Training Done')
-
+        print("Training Done")
