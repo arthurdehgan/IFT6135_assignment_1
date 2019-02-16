@@ -22,14 +22,15 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
         valid_dataset, batch_size=batch_size, shuffle=True, num_workers=2
     )
     j = 0
+    epoch = 0
     train_accs = []
     valid_accs = []
     train_losses = []
     valid_losses = []
     best_vloss = float("inf")
     while j < p:
-        net.epoch += 1
-        net.train()
+        epoch += 1
+        net.train_mode()
         for batch in dataloader:
             optimizer.zero_grad()
             X, y = batch
@@ -42,7 +43,7 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
             loss.backward()
             optimizer.step()
 
-        net.eval()
+        net.eval_mode()
         train_loss, train_acc = net.evaluate(dataloader, criterion)
         valid_loss, valid_acc = net.evaluate(validloader, criterion)
 
@@ -51,28 +52,32 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
         valid_losses.append(valid_loss)
         valid_accs.append(valid_acc)
         if valid_loss < best_vloss:
-            best_model = {
-                "net": net.state_dict(),
-                "epoch": net.epoch,
-                "batch_size": batch_size,
-                "lr": lr,
-                "vacc": valid_acc,
-                "vloss": valid_losses,
-                "taccs": train_accs,
-                "tloss": train_losses,
-                "vaccs": valid_accs,
-                "convs": net.conv_size,
-                "lins": net.lin_size,
-            }
+            best_vacc = valid_acc
             best_vloss = valid_loss
+            best_net = net
+            best_epoch = epoch
             j = 0
         else:
             j += 1
 
-        print("epoch: {}".format(net.epoch))
+        print("epoch: {}".format(epoch))
         print(" [LOSS] TRAIN {} / VALID {}".format(train_loss, valid_loss))
         print(" [ACC] TRAIN {} / VALID {}".format(train_acc, valid_acc))
-    return best_model, net.epoch
+    best_model = {
+        "net": best_net.state_dict(),
+        "best_epoch": best_epoch,
+        "final_epoch": epoch,
+        "batch_size": batch_size,
+        "lr": lr,
+        "vacc": best_vacc,
+        "vloss": best_vloss,
+        "taccs": train_accs,
+        "tloss": train_losses,
+        "vaccs": valid_accs,
+        "convs": net.conv_size,
+        "lins": net.lin_size,
+    }
+    return best_model
 
 
 def accuracy(y_pred, target):
@@ -92,15 +97,16 @@ class Dropout(nn.Module):
         self.p = p
 
     def forward(self, x):
-        data = x.data.cpu().numpy()
+        data = x.data
         shape = data.shape
+        size = int(shape[0] * shape[1])
         drop_idx = np.random.choice(
-            np.arange(data.size), replace=False, size=int(data.size * self.p)
+            np.arange(size), replace=False, size=int(size * self.p)
         )
         data = data.flatten()
         data[drop_idx] = 0
         data = data.reshape(shape)
-        x.data = torch.from_numpy(data).cuda()
+        x.data = data
         return x
 
 
@@ -108,7 +114,7 @@ class Net(nn.Module):
     def __init__(self, input_size, conv_size, lin_size):
         super(Net, self).__init__()
 
-        self.epoch = 0
+        self.drop = True
         self.lin_size = lin_size
         self.conv_size = conv_size
         self.model = nn.Sequential(
@@ -125,14 +131,24 @@ class Net(nn.Module):
             nn.ReLU(True),
             Flatten(),
             nn.Linear(conv_size * 3 * 3 * 4, lin_size),
-            nn.ReLU(True),
-            nn.Linear(lin_size, 2),
         ).cuda()
+        self.dropout = nn.Sequential(Dropout()).cuda()
+        self.lin = nn.Sequential(nn.ReLU(True), nn.Linear(lin_size, 2)).cuda()
+
+    def eval_mode(self):
+        self.drop = False
+
+    def train_mode(self):
+        self.drop = True
 
     def forward(self, x):
-        return self.model(x)
+        dat = self.model(x)
+        if self.drop:
+            dat = self.dropout(dat)
+        return self.lin(dat)
 
     def evaluate(self, dataloader, criterion):
+        self.eval_mode()
         LOSSES = 0
         ACCURACY = 0
         COUNTER = 0
