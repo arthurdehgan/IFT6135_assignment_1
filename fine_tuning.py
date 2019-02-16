@@ -16,7 +16,7 @@ if __name__ == "__main__":
     y = y[idx]
 
     best_vacc = 0
-    LRS = [0.005, 0.001, 0.0005]
+    LRS = [0.005, 0.001]
     BATCH_SIZES = [128, 256]
     LAYERS = [64, 32]
     LINEARS = [256, 512]
