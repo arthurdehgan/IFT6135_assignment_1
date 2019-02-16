@@ -70,7 +70,7 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=15):
         "batch_size": batch_size,
         "lr": lr,
         "vacc": best_vacc,
-        "vloss": best_vloss,
+        "vloss": valid_losses,
         "taccs": train_accs,
         "tloss": train_losses,
         "vaccs": valid_accs,
