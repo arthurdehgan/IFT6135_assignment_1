@@ -4,7 +4,7 @@ from torch import nn
 import torch.utils.data as utils
 
 
-def train(net, X, y, optimizer, criterion, batch_size, lr, p=50):
+def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
     X = torch.Tensor(X).float()
     N = len(X)
     y = torch.Tensor(y).long()
@@ -29,7 +29,6 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=50):
     testloader = utils.DataLoader(
         test_dataset, batch_size=batch_size, shuffle=True, num_workers=2
     )
-    epoch = 0
     j = 0
     train_accs = []
     valid_accs = []
@@ -37,7 +36,7 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=50):
     valid_losses = []
     best_vloss = float("inf")
     while j < p:
-        epoch += 1
+        net.epoch += 1
         net.train()
         for batch in dataloader:
             optimizer.zero_grad()
@@ -62,7 +61,7 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=50):
         if valid_loss < best_vloss:
             best_model = {
                 "net": net.state_dict(),
-                "epoch": epoch,
+                "epoch": net.epoch,
                 "batch_size": batch_size,
                 "lr": lr,
                 "vacc": valid_acc,
@@ -75,14 +74,15 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=50):
             }
             best_vloss = valid_loss
             best_net = net
+            j = 0
         else:
             j += 1
 
-        print("epoch: {}".format(epoch))
+        print("epoch: {}".format(net.epoch))
         print(" [LOSS] TRAIN {} / TEST {}".format(train_loss, valid_loss))
         print(" [ACC] TRAIN {} / TEST {}".format(train_acc, valid_acc))
-    print("Best test accurcy is", best_net.evaluate(testloader))
-    return best_model
+    print("Best test accurcy is", best_net.evaluate(testloader, criterion))
+    return best_model, net.epoch
 
 
 def accuracy(y_pred, target):
@@ -118,7 +118,7 @@ class Net(nn.Module):
     def __init__(self, input_size, conv_size, lin_size):
         super(Net, self).__init__()
 
-        self.drop = True
+        self.epoch = 0
         self.lin_size = lin_size
         self.conv_size = conv_size
         self.model = nn.Sequential(
@@ -135,21 +135,12 @@ class Net(nn.Module):
             nn.ReLU(True),
             Flatten(),
             nn.Linear(conv_size * 3 * 3 * 4, lin_size),
+            nn.ReLU(True),
+            nn.Linear(lin_size, 2),
         ).cuda()
-        self.lin = nn.Sequential(nn.ReLU(True), nn.Linear(lin_size, 2)).cuda()
-        self.dropout = nn.Sequential(Dropout()).cuda()
-
-    def eval(self):
-        self.drop = False
-
-    def train(self):
-        self.drop = True
 
     def forward(self, x):
-        dat = self.model(x)
-        if self.drop:
-            dat = self.dropout(dat)
-        return self.lin(dat)
+        return self.model(x)
 
     def evaluate(self, dataloader, criterion):
         LOSSES = 0

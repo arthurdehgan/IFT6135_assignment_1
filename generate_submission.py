@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import pandas as pd
-from old_network import Net
+from network import Net
 
 if __name__ == "__main__":
     submission_data = np.load("test_data.npy")
@@ -10,7 +10,6 @@ if __name__ == "__main__":
     infos = np.load("best_model_info.npy").reshape(1)[0]
     net = Net(3, infos["convs"], infos["lins"])
     net.load_state_dict(torch.load("best_model_net"))
-    net.eval()
 
     y = []
     split = 10

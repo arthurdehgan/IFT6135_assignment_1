@@ -16,7 +16,7 @@ if __name__ == "__main__":
     y = y[idx]
 
     best_vacc = 0
-    LRS = [0.01]
+    LRS = [0.05]
     BATCH_SIZES = [64, 128]
     LAYERS = [128, 64, 32, 16]
     LINEARS = [128, 256]
@@ -26,10 +26,11 @@ if __name__ == "__main__":
 
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.SGD(net.parameters(), lr=lr)
-        result = train(net, X, y, optimizer, criterion, bs, lr)
+        result, last_epoch = train(net, X, y, optimizer, criterion, bs, lr)
 
         if result["vacc"] > best_vacc:
             best_overall_model = result
             best_vacc = best_overall_model["vacc"]
     torch.save(best_overall_model["net"], "best_model_net")
+    best_overall_model["last_epoch"] = last_epoch
     np.save("best_model_info", best_overall_model)
