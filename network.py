@@ -169,3 +169,35 @@ class Net(nn.Module):
         floss = LOSSES / float(COUNTER)
         faccuracy = ACCURACY / float(COUNTER)
         return floss, faccuracy
+    
+    def train(self, X, y, epochs, optimizer, criterion, batch_size, lr):
+        train_dataset = utils.TensorDataset(X, y)
+        dataloader = utils.DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        )
+        train_accs = []
+        train_losses = []
+        for e in epochs:
+            net.train_mode()
+            for batch in dataloader:
+                optimizer.zero_grad()
+                X, y = batch
+                X = X.view(-1, 3, 64, 64)
+                y = y.view(-1)
+                X = X.cuda()
+                y = y.cuda()
+
+                loss = criterion(net.forward(X), y)
+                loss.backward()
+                optimizer.step()
+
+            net.eval_mode()
+            train_loss, train_acc = net.evaluate(dataloader, criterion)
+
+            train_accs.append(train_acc)
+            train_losses.append(train_loss)
+
+            print("epoch: {}".format(epoch))
+            print("TRAIN : [LOSS] {} / [ACC] {}".format(train_loss, train_acc))
+        print('Training Done')
+
