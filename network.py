@@ -8,26 +8,18 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
     X = torch.Tensor(X).float()
     N = len(X)
     y = torch.Tensor(y).long()
-    train_size = int(0.8 * N)
-    valid_size = int((N - train_size) / 2.0)
-    test_size = N - train_size - valid_size
-    train_index, remaining_index = torch.utils.data.random_split(
-        np.arange(N), [train_size, N - train_size]
-    )
-    valid_index, test_index = torch.utils.data.random_split(
-        np.arange(N - train_size), [valid_size, test_size]
+    train_size = int(0.75 * N)
+    valid_size = N - train_size
+    train_index, valid_index = torch.utils.data.random_split(
+        np.arange(N), [train_size, valid_size]
     )
     train_dataset = utils.TensorDataset(X[train_index], y[train_index])
     valid_dataset = utils.TensorDataset(X[valid_index], y[valid_index])
-    test_dataset = utils.TensorDataset(X[test_index], y[test_index])
     dataloader = utils.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
     )
     validloader = utils.DataLoader(
         valid_dataset, batch_size=batch_size, shuffle=True, num_workers=2
-    )
-    testloader = utils.DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=True, num_workers=2
     )
     j = 0
     train_accs = []
@@ -73,15 +65,13 @@ def train(net, X, y, optimizer, criterion, batch_size, lr, p=30):
                 "lins": net.lin_size,
             }
             best_vloss = valid_loss
-            best_net = net
             j = 0
         else:
             j += 1
 
         print("epoch: {}".format(net.epoch))
-        print(" [LOSS] TRAIN {} / TEST {}".format(train_loss, valid_loss))
-        print(" [ACC] TRAIN {} / TEST {}".format(train_acc, valid_acc))
-    print("Best test accurcy is", best_net.evaluate(testloader, criterion))
+        print(" [LOSS] TRAIN {} / VALID {}".format(train_loss, valid_loss))
+        print(" [ACC] TRAIN {} / VALID {}".format(train_acc, valid_acc))
     return best_model, net.epoch
 
 
