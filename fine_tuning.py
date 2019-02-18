@@ -3,21 +3,21 @@ import numpy as np
 import torch
 from torch import optim
 from torch import nn
-from network import Net, train
+from network import Net, train, create_dataset
 
 
 if __name__ == "__main__":
-    DATA_PATH = "./"
-    X = np.load(DATA_PATH + "train_data.npy")
-    y = np.load(DATA_PATH + "train_target.npy")
-    X = X / np.max(X)
+    test_path = "/home/arthur/git/IFT6135_assignment_1/testset/test/"
+    dogs_path = "/home/arthur/git/IFT6135_assignment_1/trainset/Dog/"
+    cats_path = "/home/arthur/git/IFT6135_assignment_1/trainset/Cat/"
+    X, y, _ = create_dataset(cats_path, dogs_path, test_path)
     idx = np.random.permutation(len(X))
     X = X[idx]
     y = y[idx]
 
     best_vacc = 0
-    LRS = [0.01]
-    BATCH_SIZES = [128, 256]
+    LRS = [0.01, 0.005, 0.001]
+    BATCH_SIZES = [32, 64, 128, 256]
     LAYERS = [128, 64, 32, 16]
     LINEARS = [128, 256, 512]
     for lin, lr, lay, bs in product(LINEARS, LRS, LAYERS, BATCH_SIZES):
@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.SGD(net.parameters(), lr=lr)
-        result = train(net, X, y, bs, lr, p=25)
+        result = train(net, X, y, optimizer, criterion, bs, lr, p=25)
 
         if result["vacc"] > best_vacc:
             best_overall_model = result
